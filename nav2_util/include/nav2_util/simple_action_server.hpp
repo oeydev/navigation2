@@ -25,38 +25,18 @@
 namespace nav2_util
 {
 
-template<typename ActionT, typename nodeT = rclcpp::Node>
+template<typename ActionT>
 class SimpleActionServer
 {
 public:
   typedef std::function<void ()> ExecuteCallback;
 
   explicit SimpleActionServer(
-    typename nodeT::SharedPtr node,
+    rclcpp::Node::SharedPtr node,
     const std::string & action_name,
     ExecuteCallback execute_callback,
     bool autostart = true)
-  : SimpleActionServer(
-      node->get_node_base_interface(),
-      node->get_node_clock_interface(),
-      node->get_node_logging_interface(),
-      node->get_node_waitables_interface(),
-      action_name, execute_callback, autostart)
-  {}
-
-  explicit SimpleActionServer(
-    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_interface,
-    rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_interface,
-    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_interface,
-    rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface,
-    const std::string & action_name,
-    ExecuteCallback execute_callback,
-    bool autostart = true)
-  : node_base_interface_(node_base_interface),
-    node_clock_interface_(node_clock_interface),
-    node_logging_interface_(node_logging_interface),
-    node_waitables_interface_(node_waitables_interface),
-    action_name_(action_name), execute_callback_(execute_callback)
+  : node_(node), action_name_(action_name), execute_callback_(execute_callback)
   {
     if (autostart) {
       server_active_ = true;
@@ -123,10 +103,7 @@ public:
       };
 
     action_server_ = rclcpp_action::create_server<ActionT>(
-      node_base_interface_,
-      node_clock_interface_,
-      node_logging_interface_,
-      node_waitables_interface_,
+      node_,
       action_name_,
       handle_goal,
       handle_cancel,
@@ -285,11 +262,8 @@ public:
   }
 
 protected:
-  // The SimpleActionServer isn't itself a node, so it needs interfaces to one
-  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_interface_;
-  rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_interface_;
-  rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_interface_;
-  rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface_;
+  // The SimpleActionServer isn't itself a node, so needs to know which one to use
+  rclcpp::Node::SharedPtr node_;
   std::string action_name_;
 
   ExecuteCallback execute_callback_;
@@ -315,20 +289,17 @@ protected:
 
   void debug_msg(const std::string & msg) const
   {
-    RCLCPP_DEBUG(node_logging_interface_->get_logger(),
-      "[%s] [ActionServer] %s", action_name_.c_str(), msg.c_str());
+    RCLCPP_DEBUG(node_->get_logger(), "[%s] [ActionServer] %s", action_name_.c_str(), msg.c_str());
   }
 
   void error_msg(const std::string & msg) const
   {
-    RCLCPP_ERROR(node_logging_interface_->get_logger(),
-      "[%s] [ActionServer] %s", action_name_.c_str(), msg.c_str());
+    RCLCPP_ERROR(node_->get_logger(), "[%s] [ActionServer] %s", action_name_.c_str(), msg.c_str());
   }
 
   void warn_msg(const std::string & msg) const
   {
-    RCLCPP_WARN(node_logging_interface_->get_logger(),
-      "[%s] [ActionServer] %s", action_name_.c_str(), msg.c_str());
+    RCLCPP_WARN(node_->get_logger(), "[%s] [ActionServer] %s", action_name_.c_str(), msg.c_str());
   }
 };
 

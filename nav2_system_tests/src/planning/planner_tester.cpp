@@ -17,7 +17,6 @@
 #include <tuple>
 #include <utility>
 #include <memory>
-#include <iostream>
 #include <chrono>
 #include <sstream>
 #include <iomanip>
@@ -36,9 +35,8 @@ namespace nav2_system_tests
 {
 
 PlannerTester::PlannerTester()
-: Node("PlannerTester"), is_active_(false),
-  map_set_(false), costmap_set_(false),
-  using_fake_costmap_(true), trinary_costmap_(true),
+: Node("PlannerTester"), map_publish_rate_(100s), map_set_(false), costmap_set_(false),
+  using_fake_costmap_(true), costmap_server_running_(false), trinary_costmap_(true),
   track_unknown_space_(false), lethal_threshold_(100), unknown_cost_value_(-1),
   testCostmapType_(TestCostmap::open_space), spin_thread_(nullptr)
 {
@@ -56,7 +54,6 @@ PlannerTester::PlannerTester()
   map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map");
 
   // We start with a 10x10 grid with no obstacles
-  costmap_ = std::make_unique<Costmap>(this);
   loadSimpleCostmap(TestCostmap::open_space);
 
   startCostmapServer();
@@ -65,22 +62,15 @@ PlannerTester::PlannerTester()
   spin_thread_ = new std::thread(&PlannerTester::spinThread, this);
 }
 
-void PlannerTester::deactivate()
+PlannerTester::~PlannerTester()
 {
   executor_.cancel();
   spin_thread_->join();
-  spin_thread_.reset();
-
-  auto state = rclcpp_lifecycle::State();
-  planner_tester_->onCleanup(state);
-
-  map_timer_.reset();
-  map_pub_.reset();
-  map_.reset();
-  tf_broadcaster_.reset();
+  delete spin_thread_;
+  spin_thread_ = nullptr;
 }
 
-PlannerTester::~PlannerTester()
+void PlannerTester::spinThread()
 {
   executor_.add_node(this->get_node_base_interface());
   executor_.spin();
@@ -134,7 +124,7 @@ void PlannerTester::loadDefaultMap()
   map_->info.map_load_time = this->now();
 
   // TODO(orduno): #443 replace with a latched topic
-  map_timer_ = create_wall_timer(1s, [this]() -> void {map_pub_->publish(*map_);});
+  map_timer_ = create_wall_timer(1s, [this]() -> void {map_pub_->publish(map_);});
 
   map_set_ = true;
   costmap_set_ = false;
@@ -143,12 +133,29 @@ void PlannerTester::loadDefaultMap()
   setCostmap();
 }
 
+void PlannerTester::setCostmap()
+{
+  if (!map_set_) {
+    RCLCPP_ERROR(this->get_logger(), "Map has not been provided");
+    return;
+  }
+
+  costmap_ = std::make_unique<Costmap>(
+    this, trinary_costmap_, track_unknown_space_, lethal_threshold_, unknown_cost_value_);
+
+  costmap_->set_static_map(*map_);
+
+  costmap_set_ = true;
+  using_fake_costmap_ = false;
+}
+
 void PlannerTester::loadSimpleCostmap(const TestCostmap & testCostmapType)
 {
-  RCLCPP_INFO(get_logger(), "loadSimpleCostmap called.");
   if (costmap_set_) {
     RCLCPP_DEBUG(this->get_logger(), "Setting a new costmap with fake values");
   }
+
+  costmap_ = std::make_unique<Costmap>(this);
 
   costmap_->set_test_costmap(testCostmapType);
 
@@ -169,8 +176,8 @@ void PlannerTester::startRobotPoseProvider()
 
 void PlannerTester::startCostmapServer()
 {
-  if (!map_set_) {
-    RCLCPP_ERROR(this->get_logger(), "Map has not been provided");
+  if (!costmap_set_) {
+    RCLCPP_ERROR(this->get_logger(), "Costmap must be set before starting the service");
     return;
   }
 
@@ -187,8 +194,7 @@ void PlannerTester::startCostmapServer()
   costmap_server_ = create_service<nav2_msgs::srv::GetCostmap>(
     "GetCostmap", costmap_service_callback);
 
-  costmap_set_ = true;
-  using_fake_costmap_ = false;
+  costmap_server_running_ = true;
 }
 
 bool PlannerTester::defaultPlannerTest(
@@ -230,6 +236,7 @@ bool PlannerTester::defaultPlannerTest(
 
   // TODO(orduno): #443 On a default test, provide the reference path to compare with the planner
   //               result.
+
   return plannerTest(robot_position, goal, path);
 }
 
@@ -322,7 +329,7 @@ bool PlannerTester::plannerTest(
   updateRobotPosition(robot_position);
 
   // Then request to compute a path
-  TaskStatus status = createPlan(goal, path);
+  TaskStatus status = sendRequest(goal, path);
 
   RCLCPP_DEBUG(this->get_logger(), "Path request status: %d", status);
 
@@ -413,7 +420,7 @@ bool PlannerTester::isCollisionFree(const ComputePathToPoseResult & path)
 
     if (!collisionFree) {
       RCLCPP_WARN(this->get_logger(), "Path has collision at (%.2f, %.2f)",
-        pose.pose.position.x, pose.pose.position.y);
+        pose.position.x, pose.position.y);
       printPath(path);
       return false;
     }
@@ -446,10 +453,10 @@ bool PlannerTester::isWithinTolerance(
   auto path_end = path.poses.end()[-1];
 
   if (
-    path_start.pose.position.x == robot_position.x &&
-    path_start.pose.position.y == robot_position.y &&
-    path_end.pose.position.x == goal.pose.position.x &&
-    path_end.pose.position.y == goal.pose.position.y)
+    path_start.position.x == robot_position.x &&
+    path_start.position.y == robot_position.y &&
+    path_end.position.x == goal.pose.position.x &&
+    path_end.position.y == goal.pose.position.y)
   {
     RCLCPP_DEBUG(this->get_logger(), "Path has correct start and end points");
 
@@ -461,16 +468,14 @@ bool PlannerTester::isWithinTolerance(
     robot_position.x, robot_position.y, goal.pose.position.x, goal.pose.position.y);
 
   RCLCPP_DEBUG(this->get_logger(), "Computed path starts at (%.2f, %.2f) and ends at (%.2f, %.2f)",
-    path_start.pose.position.x, path_start.pose.position.y,
-    path_end.pose.position.x, path_end.pose.position.y);
+    path_start.position.x, path_start.position.y, path_end.position.x, path_end.position.y);
 
   return false;
 }
 
-void PlannerTester::printPath(const ComputePathToPoseResult & path) const
+bool PlannerTester::sendCancel()
 {
-  auto index = 0;
-  auto ss = std::stringstream{};
+  RCLCPP_ERROR(this->get_logger(), "Function not implemented yet");
 
   // TODO(orduno) #443
   return false;

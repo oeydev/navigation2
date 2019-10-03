@@ -38,7 +38,7 @@
 #include "nav_2d_utils/parameters.hpp"
 #include "pluginlib/class_list_macros.hpp"
 #include "dwb_core/exceptions.hpp"
-#include "nav2_util/node_utils.hpp"
+#include "nav2_util/duration_conversions.hpp"
 
 namespace dwb_plugins
 {
@@ -47,7 +47,7 @@ void LimitedAccelGenerator::initialize(const nav2_util::LifecycleNode::SharedPtr
 {
   StandardTrajectoryGenerator::initialize(nh);
 
-  nav2_util::declare_parameter_if_not_declared(nh, "sim_period");
+  nh->declare_parameter("sim_period");
 
   if (nh->get_parameter("sim_period", acceleration_time_)) {
   } else {
@@ -69,8 +69,7 @@ void LimitedAccelGenerator::checkUseDwaParam(const nav2_util::LifecycleNode::Sha
   bool use_dwa = false;
   nh->get_parameter("use_dwa", use_dwa);
   if (!use_dwa) {
-    throw nav2_core::
-          PlannerException("Deprecated parameter use_dwa set to false. "
+    throw nav_core2::PlannerException("Deprecated parameter use_dwa set to false. "
             "Please use StandardTrajectoryGenerator for that functionality.");
   }
 }
@@ -88,7 +87,7 @@ dwb_msgs::msg::Trajectory2D LimitedAccelGenerator::generateTrajectory(
 {
   dwb_msgs::msg::Trajectory2D traj;
   traj.velocity = cmd_vel;
-  traj.duration = rclcpp::Duration::from_seconds(sim_time_);
+  traj.duration = nav2_util::duration_from_seconds(sim_time_);
   geometry_msgs::msg::Pose2D pose = start_pose;
 
   std::vector<double> steps = getTimeSteps(cmd_vel);

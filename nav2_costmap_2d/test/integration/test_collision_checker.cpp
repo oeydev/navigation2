@@ -14,7 +14,6 @@
 
 #include <string>
 #include <vector>
-#include <memory>
 
 #include "gtest/gtest.h"
 #include "rclcpp/rclcpp.hpp"
@@ -84,7 +83,7 @@ public:
 class TestCollisionChecker : public nav2_util::LifecycleNode
 {
 public:
-  explicit TestCollisionChecker(std::string name)
+  TestCollisionChecker(std::string name)
   : LifecycleNode(name, "", true),
     global_frame_("map")
   {
@@ -103,10 +102,6 @@ public:
   {
     RCLCPP_INFO(get_logger(), "Configuring");
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
-    auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-      rclcpp_node_->get_node_base_interface(),
-      rclcpp_node_->get_node_timers_interface());
-    tf_buffer_->setCreateTimerInterface(timer_interface);
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
     tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(shared_from_this());
 
@@ -178,7 +173,6 @@ public:
     setPose(x, y, theta);
     publishFootprint();
     publishCostmap();
-    rclcpp::sleep_for(std::chrono::milliseconds(50));
     return collision_checker_->isCollisionFree(pose);
   }
 

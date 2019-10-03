@@ -129,9 +129,7 @@ new_goal_received:
 
         // We can handle a new goal if we're still executing
         auto status = goal_handle_->get_status();
-        if (goal_updated_ && (status == action_msgs::msg::GoalStatus::STATUS_EXECUTING ||
-          status == action_msgs::msg::GoalStatus::STATUS_ACCEPTED ))
-        {
+        if (goal_updated_ && (status == action_msgs::msg::GoalStatus::STATUS_EXECUTING)) {
           goal_updated_ = false;
           goto new_goal_received;
         }

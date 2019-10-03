@@ -42,7 +42,6 @@
 #include "tf2_ros/message_filter.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
-#include "tf2_ros/create_timer_ros.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -286,7 +285,6 @@ AmclNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   // Map
   map_free(map_);
   map_ = nullptr;
-  first_map_received_ = false;
   free_space_indices.resize(0);
 
   // Transforms
@@ -309,18 +307,6 @@ AmclNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   lasers_.clear();
   lasers_update_.clear();
   frame_to_laser_.clear();
-  force_update_ = true;
-
-  if (set_initial_pose_) {
-    set_parameter(rclcpp::Parameter("initial_pose.x",
-      rclcpp::ParameterValue(last_published_pose_.pose.pose.position.x)));
-    set_parameter(rclcpp::Parameter("initial_pose.y",
-      rclcpp::ParameterValue(last_published_pose_.pose.pose.position.y)));
-    set_parameter(rclcpp::Parameter("initial_pose.z",
-      rclcpp::ParameterValue(last_published_pose_.pose.pose.position.z)));
-    set_parameter(rclcpp::Parameter("initial_pose.yaw",
-      rclcpp::ParameterValue(tf2::getYaw(last_published_pose_.pose.pose.orientation))));
-  }
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -1018,7 +1004,6 @@ AmclNode::initParameters()
   get_parameter("z_rand", z_rand_);
   get_parameter("z_short", z_short_);
   get_parameter("first_map_only_", first_map_only_);
-  get_parameter("always_reset_initial_pose", always_reset_initial_pose_);
 
   save_pose_period_ = tf2::durationFromSec(1.0 / save_pose_rate);
   transform_tolerance_ = tf2::durationFromSec(tmp_tol);
@@ -1036,10 +1021,6 @@ AmclNode::initParameters()
       " this isn't allowed so max_particles will be set to min_particles.");
     max_particles_ = min_particles_;
   }
-
-  if (always_reset_initial_pose_) {
-    initial_pose_is_known_ = false;
-  }
 }
 
 void
@@ -1049,8 +1030,10 @@ AmclNode::mapReceived(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
   if (first_map_only_ && first_map_received_) {
     return;
   }
-  handleMapMessage(*msg);
-  first_map_received_ = true;
+  if (initial_pose_is_known_) {
+    handleMapMessage(*msg);
+    first_map_received_ = true;
+  }
 }
 
 void
@@ -1069,7 +1052,14 @@ AmclNode::handleMapMessage(const nav_msgs::msg::OccupancyGrid & msg)
       msg.header.frame_id.c_str(),
       global_frame_id_.c_str());
   }
+
   freeMapDependentMemory();
+  // Clear queued laser objects because they hold pointers to the existing
+  // map, #5202.
+  lasers_.clear();
+  lasers_update_.clear();
+  frame_to_laser_.clear();
+
   map_ = convertMap(msg);
 
 #if NEW_UNIFORM_SAMPLING
@@ -1226,15 +1216,9 @@ AmclNode::initOdometry()
   init_pose_[1] = last_published_pose_.pose.pose.position.y;
   init_pose_[2] = last_published_pose_.pose.pose.position.z;
 
-  if (!initial_pose_is_known_) {
-    init_cov_[0] = 0.5 * 0.5;
-    init_cov_[1] = 0.5 * 0.5;
-    init_cov_[2] = (M_PI / 12.0) * (M_PI / 12.0);
-  } else {
-    init_cov_[0] = last_published_pose_.pose.covariance[0];
-    init_cov_[1] = last_published_pose_.pose.covariance[7];
-    init_cov_[2] = last_published_pose_.pose.covariance[35];
-  }
+  init_cov_[0] = 0.5 * 0.5;
+  init_cov_[1] = 0.5 * 0.5;
+  init_cov_[2] = (M_PI / 12.0) * (M_PI / 12.0);
 
   motion_model_ = std::unique_ptr<nav2_amcl::MotionModel>(nav2_amcl::MotionModel::createMotionModel(
         robot_model_type_, alpha1_, alpha2_, alpha3_, alpha4_, alpha5_));

@@ -34,8 +34,10 @@ RUN vcs import src < ros2_dependencies.repos
 
 # install underlay dependencies
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    apt-get update && rosdep install -q -y \
-      --from-paths src \
+    apt-get update && \
+    rosdep install -q -y \
+      --from-paths \
+        src \
       --ignore-src \
     && rm -rf /var/lib/apt/lists/*
 

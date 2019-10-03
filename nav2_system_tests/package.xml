@@ -15,7 +15,6 @@
   <build_depend>nav2_util</build_depend>
   <build_depend>nav2_msgs</build_depend>
   <build_depend>nav2_lifecycle_manager</build_depend>
-  <build_depend>nav2_navfn_planner</build_depend>
   <build_depend>nav_msgs</build_depend>
   <build_depend>visualization_msgs</build_depend>
   <build_depend>nav2_amcl</build_depend>
@@ -27,7 +26,6 @@
   <build_depend>gazebo_ros_pkgs</build_depend>
   <build_depend>launch_ros</build_depend>
   <build_depend>launch_testing</build_depend>
-  <build_depend>nav2_planner</build_depend>
 
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>launch_testing</exec_depend>
@@ -37,7 +35,6 @@
   <exec_depend>nav2_util</exec_depend>
   <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>nav2_lifecycle_manager</exec_depend>
-  <exec_depend>nav2_navfn_planner</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>

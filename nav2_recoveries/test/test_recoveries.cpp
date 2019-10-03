@@ -100,7 +100,7 @@ protected:
   RecoveryTest() {}
   ~RecoveryTest() {}
 
-  void SetUp()
+  void SetUp() override
   {
     node_ = std::make_shared<rclcpp::Node>("RecoveryTestNode");
     auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
@@ -119,16 +119,14 @@ protected:
   bool sendCommand(const std::string & command)
   {
     if (!client_->wait_for_action_server(4s)) {
-      std::cout << "Server not up" << std::endl;
       return false;
     }
 
     auto future_goal = getGoal(command);
 
-    if (rclcpp::spin_until_future_complete(node_lifecycle_, future_goal) !=
+    if (rclcpp::spin_until_future_complete(node_, future_goal) !=
       rclcpp::executor::FutureReturnCode::SUCCESS)
     {
-      std::cout << "failed sending goal" << std::endl;
       // failed sending the goal
       return false;
     }
@@ -136,7 +134,6 @@ protected:
     goal_handle_ = future_goal.get();
 
     if (!goal_handle_) {
-      std::cout << "goal was rejected" << std::endl;
       // goal was rejected by the action server
       return false;
     }
@@ -170,7 +167,7 @@ protected:
     rclcpp::executor::FutureReturnCode frc;
 
     do {
-      frc = rclcpp::spin_until_future_complete(node_lifecycle_, future_result);
+      frc = rclcpp::spin_until_future_complete(node_, future_result);
     } while (frc != rclcpp::executor::FutureReturnCode::SUCCESS);
 
     return future_result.get();

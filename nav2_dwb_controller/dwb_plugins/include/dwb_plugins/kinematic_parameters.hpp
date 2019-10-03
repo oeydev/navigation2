@@ -89,7 +89,7 @@ public:
    */
   bool isValidSpeed(double x, double y, double theta);
 
-  using Ptr = std::shared_ptr<KinematicParameters>;
+  typedef std::shared_ptr<KinematicParameters> Ptr;
 
 protected:
   // For parameter descriptions, see cfg/KinematicParams.cfg

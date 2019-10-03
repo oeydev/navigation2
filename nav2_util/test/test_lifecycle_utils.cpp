@@ -20,8 +20,7 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-using nav2_util::startup_lifecycle_nodes;
-using nav2_util::reset_lifecycle_nodes;
+using nav2_util::bringup_lifecycle_nodes;
 
 class RclCppFixture
 {
@@ -31,7 +30,7 @@ public:
 };
 RclCppFixture g_rclcppfixture;
 
-void SpinNodesUntilDone(
+void SpinNodesUntilActivated(
   std::vector<rclcpp_lifecycle::LifecycleNode::SharedPtr> nodes,
   std::atomic<bool> * test_done)
 {
@@ -51,9 +50,8 @@ TEST(Lifecycle, interface)
   nodes.push_back(rclcpp_lifecycle::LifecycleNode::make_shared("bar"));
 
   std::atomic<bool> done(false);
-  std::thread node_thread(SpinNodesUntilDone, nodes, &done);
-  startup_lifecycle_nodes("/foo:/bar");
-  reset_lifecycle_nodes("/foo:/bar");
+  std::thread node_thread(SpinNodesUntilActivated, nodes, &done);
+  bringup_lifecycle_nodes("/foo:/bar");
   done = true;
   node_thread.join();
   SUCCEED();

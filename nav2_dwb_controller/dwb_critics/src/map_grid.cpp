@@ -39,7 +39,6 @@
 #include <memory>
 #include "dwb_core/exceptions.hpp"
 #include "nav2_costmap_2d/cost_values.hpp"
-#include "nav2_util/node_utils.hpp"
 
 using std::abs;
 using costmap_queue::CellData;
@@ -61,8 +60,7 @@ void MapGridCritic::onInit()
   // Always set to true, but can be overriden by subclasses
   stop_on_failure_ = true;
 
-  nav2_util::declare_parameter_if_not_declared(nh_,
-    name_ + ".aggregation_type", rclcpp::ParameterValue(std::string("last")));
+  nh_->declare_parameter(name_ + ".aggregation_type", rclcpp::ParameterValue(std::string("last")));
 
   std::string aggro_str;
   nh_->get_parameter(name_ + ".aggregation_type", aggro_str);
@@ -119,11 +117,9 @@ double MapGridCritic::scoreTrajectory(const dwb_msgs::msg::Trajectory2D & traj)
     grid_dist = scorePose(traj.poses[i]);
     if (stop_on_failure_) {
       if (grid_dist == obstacle_score_) {
-        throw dwb_core::
-              IllegalTrajectoryException(name_, "Trajectory Hits Obstacle.");
+        throw nav_core2::IllegalTrajectoryException(name_, "Trajectory Hits Obstacle.");
       } else if (grid_dist == unreachable_score_) {
-        throw dwb_core::
-              IllegalTrajectoryException(name_, "Trajectory Hits Unreachable Area.");
+        throw nav_core2::IllegalTrajectoryException(name_, "Trajectory Hits Unreachable Area.");
       }
     }
 
@@ -150,8 +146,7 @@ double MapGridCritic::scorePose(const geometry_msgs::msg::Pose2D & pose)
   unsigned int cell_x, cell_y;
   // we won't allow trajectories that go off the map... shouldn't happen that often anyways
   if (!costmap_->worldToMap(pose.x, pose.y, cell_x, cell_y)) {
-    throw dwb_core::
-          IllegalTrajectoryException(name_, "Trajectory Goes Off Grid.");
+    throw nav_core2::IllegalTrajectoryException(name_, "Trajectory Goes Off Grid.");
   }
   return getScore(cell_x, cell_y);
 }

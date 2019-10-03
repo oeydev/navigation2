@@ -262,7 +262,6 @@ protected:
 
   LayeredCostmap * layered_costmap_{nullptr};
   std::string name_;
-  std::string parent_namespace_;
   void mapUpdateLoop(double frequency);
   bool map_update_thread_shutdown_{false};
   bool stop_updates_{false};

@@ -86,7 +86,7 @@ protected:
   map_t * map_{nullptr};
   map_t * convertMap(const nav_msgs::msg::OccupancyGrid & map_msg);
   bool first_map_only_{true};
-  std::atomic<bool> first_map_received_{false};
+  bool first_map_received_{false};
   amcl_hyp_t * initial_pose_hyp_;
   std::recursive_mutex configuration_mutex_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::ConstSharedPtr map_sub_;
@@ -136,7 +136,7 @@ protected:
     std::shared_ptr<std_srvs::srv::Empty::Response> response);
 
   // Nomotion update control. Used to temporarily let amcl update samples even when no motion occurs
-  std::atomic<bool> force_update_{false};
+  bool force_update_{false};
 
   // Odometry
   void initOdometry();

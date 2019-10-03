@@ -83,12 +83,10 @@ private:
   // The client used to control the nav2 stack
   nav2_lifecycle_manager::LifecycleManagerClient client_;
 
-  QPushButton * start_reset_button_{nullptr};
-  QPushButton * pause_resume_button_{nullptr};
+  QPushButton * start_stop_button_{nullptr};
 
   QStateMachine state_machine_;
 
-  QState * pre_initial_{nullptr};
   QState * initial_{nullptr};
   QState * starting_{nullptr};
   QState * stopping_{nullptr};

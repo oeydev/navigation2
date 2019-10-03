@@ -43,8 +43,8 @@
 #include <vector>
 
 #include "nav2_costmap_2d/layered_costmap.hpp"
+#include "nav2_util/duration_conversions.hpp"
 #include "nav2_util/execution_timer.hpp"
-#include "nav2_util/node_utils.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 #include "nav2_util/robot_utils.hpp"
 
@@ -70,7 +70,6 @@ Costmap2DROS::Costmap2DROS(const std::string & name, const std::string & absolut
   std::vector<std::string> plugin_names{"static_layer", "obstacle_layer", "inflation_layer"};
   std::vector<std::string> plugin_types{"nav2_costmap_2d::StaticLayer",
     "nav2_costmap_2d::ObstacleLayer", "nav2_costmap_2d::InflationLayer"};
-  std::vector<std::string> clearable_layers{"obstacle_layer"};
 
   declare_parameter("always_send_full_costmap", rclcpp::ParameterValue(false));
   declare_parameter("footprint_padding", rclcpp::ParameterValue(0.01f));
@@ -78,8 +77,7 @@ Costmap2DROS::Costmap2DROS(const std::string & name, const std::string & absolut
   declare_parameter("global_frame", rclcpp::ParameterValue(std::string("map")));
   declare_parameter("height", rclcpp::ParameterValue(10));
   declare_parameter("lethal_cost_threshold", rclcpp::ParameterValue(100));
-  declare_parameter("map_topic", rclcpp::ParameterValue(
-      (parent_namespace_ == "/" ? "" : parent_namespace_ ) + std::string("/map")));
+  declare_parameter("map_topic", rclcpp::ParameterValue(std::string("/map")));
   declare_parameter("observation_sources", rclcpp::ParameterValue(std::string("")));
   declare_parameter("origin_x", rclcpp::ParameterValue(0.0));
   declare_parameter("origin_y", rclcpp::ParameterValue(0.0));
@@ -97,7 +95,6 @@ Costmap2DROS::Costmap2DROS(const std::string & name, const std::string & absolut
   declare_parameter("update_frequency", rclcpp::ParameterValue(5.0));
   declare_parameter("use_maximum", rclcpp::ParameterValue(false));
   declare_parameter("width", rclcpp::ParameterValue(10));
-  declare_parameter("clearable_layers", rclcpp::ParameterValue(clearable_layers));
 }
 
 Costmap2DROS::~Costmap2DROS()
@@ -133,8 +130,6 @@ Costmap2DROS::on_configure(const rclcpp_lifecycle::State & /*state*/)
     // TODO(mjeronimo): instead of get(), use a shared ptr
     plugin->initialize(layered_costmap_, plugin_names_[i], tf_buffer_.get(),
       shared_from_this(), client_node_, rclcpp_node_);
-
-    RCLCPP_INFO(get_logger(), "Initialized plugin \"%s\"", plugin_names_[i].c_str());
   }
 
   // Create the publishers and subscribers
@@ -202,7 +197,6 @@ Costmap2DROS::on_activate(const rclcpp_lifecycle::State & /*state*/)
         &Costmap2DROS::mapUpdateLoop, this, map_update_frequency_));
 
   start();
-
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
@@ -231,7 +225,6 @@ Costmap2DROS::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Cleaning up");
 
-  resetLayers();
   delete layered_costmap_;
   layered_costmap_ = nullptr;
 
@@ -301,7 +294,7 @@ Costmap2DROS::getParameters()
 
   // 2. The map publish frequency cannot be 0 (to avoid a divde-by-zero)
   if (map_publish_frequency_ > 0) {
-    publish_cycle_ = rclcpp::Duration::from_seconds(1 / map_publish_frequency_);
+    publish_cycle_ = nav2_util::duration_from_seconds(1 / map_publish_frequency_);
   } else {
     publish_cycle_ = rclcpp::Duration(-1);
   }
@@ -376,6 +369,7 @@ Costmap2DROS::mapUpdateLoop(double frequency)
     timer.end();
 
     RCLCPP_DEBUG(get_logger(), "Map update time: %.9f", timer.elapsed_time_in_seconds());
+
     if (publish_cycle_ > rclcpp::Duration(0) && layered_costmap_->isInitialized()) {
       unsigned int x0, y0, xn, yn;
       layered_costmap_->getBounds(&x0, &xn, &y0, &yn);
@@ -417,11 +411,13 @@ Costmap2DROS::updateMap()
       double x = pose.pose.position.x;
       double y = pose.pose.position.y;
       double yaw = tf2::getYaw(pose.pose.orientation);
+
       layered_costmap_->updateMap(x, y, yaw);
 
       geometry_msgs::msg::PolygonStamped footprint;
       footprint.header.frame_id = global_frame_;
       footprint.header.stamp = now();
+
       transformFootprint(x, y, yaw, padded_footprint_, footprint);
 
       RCLCPP_DEBUG(get_logger(), "Publishing footprint");
@@ -435,6 +431,7 @@ void
 Costmap2DROS::start()
 {
   RCLCPP_INFO(get_logger(), "start");
+
   std::vector<std::shared_ptr<Layer>> * plugins = layered_costmap_->getPlugins();
 
   // check if we're stopped or just paused

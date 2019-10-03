@@ -40,7 +40,7 @@
 #include <memory>
 
 #include "rclcpp/rclcpp.hpp"
-#include "nav2_costmap_2d/costmap_2d_ros.hpp"
+#include "dwb_core/common_types.hpp"
 #include "geometry_msgs/msg/pose2_d.hpp"
 #include "nav_2d_msgs/msg/twist2_d.hpp"
 #include "nav_2d_msgs/msg/path2_d.hpp"
@@ -77,7 +77,7 @@ namespace dwb_core
 class TrajectoryCritic
 {
 public:
-  using Ptr = std::shared_ptr<dwb_core::TrajectoryCritic>;
+  typedef std::shared_ptr<dwb_core::TrajectoryCritic> Ptr;
 
   virtual ~TrajectoryCritic() {}
 
@@ -94,7 +94,7 @@ public:
   void initialize(
     const nav2_util::LifecycleNode::SharedPtr & nh,
     std::string & name,
-    std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
+    CostmapROSPtr costmap_ros)
   {
     name_ = name;
     costmap_ros_ = costmap_ros;
@@ -174,7 +174,7 @@ public:
 
 protected:
   std::string name_;
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
+  CostmapROSPtr costmap_ros_;
   double scale_;
   nav2_util::LifecycleNode::SharedPtr nh_;
 };

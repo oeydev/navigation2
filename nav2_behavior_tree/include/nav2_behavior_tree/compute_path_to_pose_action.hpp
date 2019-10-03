@@ -19,7 +19,6 @@
 #include <string>
 
 #include "nav2_msgs/action/compute_path_to_pose.hpp"
-#include "nav_msgs/msg/path.h"
 #include "nav2_behavior_tree/bt_action_node.hpp"
 
 namespace nav2_behavior_tree
@@ -40,7 +39,7 @@ public:
 
   void on_success() override
   {
-    *(blackboard()->get<nav_msgs::msg::Path::SharedPtr>("path")) = result_.result->path;
+    *(blackboard()->get<nav2_msgs::msg::Path::SharedPtr>("path")) = result_.result->path;
 
     if (first_time_) {
       first_time_ = false;

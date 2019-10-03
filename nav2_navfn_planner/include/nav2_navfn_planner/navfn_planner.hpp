@@ -1,6 +1,5 @@
 // Copyright (c) 2018 Intel Corporation
 // Copyright (c) 2018 Simbe Robotics
-// Copyright (c) 2019 Samsung Research America
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,39 +38,34 @@
 namespace nav2_navfn_planner
 {
 
-class NavfnPlanner : public nav2_core::GlobalPlanner
+class NavfnPlanner : public nav2_util::LifecycleNode
 {
 public:
   NavfnPlanner();
   ~NavfnPlanner();
 
-  // plugin configure
-  void configure(
-    rclcpp_lifecycle::LifecycleNode::SharedPtr parent,
-    std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
-    std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros) override;
-
-  // plugin cleanup
-  void cleanup() override;
-
-  // plugin activate
-  void activate() override;
-
-  // plugin deactivate
-  void deactivate() override;
-
-
-  // plugin create path
-  nav_msgs::msg::Path createPlan(
-    const geometry_msgs::msg::PoseStamped & start,
-    const geometry_msgs::msg::PoseStamped & goal) override;
-
 protected:
+  // Implement the lifecycle interface
+  nav2_util::CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
+  nav2_util::CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
+  nav2_util::CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
+  nav2_util::CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
+  nav2_util::CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
+  nav2_util::CallbackReturn on_error(const rclcpp_lifecycle::State & state) override;
+
+  using ActionServer = nav2_util::SimpleActionServer<nav2_msgs::action::ComputePathToPose>;
+
+  // Our action server implements the ComputePathToPose action
+  std::unique_ptr<ActionServer> action_server_;
+
+  // The action server callback
+  void computePathToPose();
+
   // Compute a plan given start and goal poses, provided in global world frame.
   bool makePlan(
     const geometry_msgs::msg::Pose & start,
     const geometry_msgs::msg::Pose & goal, double tolerance,
-    nav_msgs::msg::Path & plan);
+    nav2_msgs::msg::Path & plan);
 
   // Compute the navigation function given a seed point in the world to start from
   bool computePotential(const geometry_msgs::msg::Point & world_point);
@@ -79,12 +73,12 @@ protected:
   // Compute a plan to a goal from a potential - must call computePotential first
   bool getPlanFromPotential(
     const geometry_msgs::msg::Pose & goal,
-    nav_msgs::msg::Path & plan);
+    nav2_msgs::msg::Path & plan);
 
   // Remove artifacts at the end of the path - originated from planning on a discretized world
   void smoothApproachToGoal(
     const geometry_msgs::msg::Pose & goal,
-    nav_msgs::msg::Path & plan);
+    nav2_msgs::msg::Path & plan);
 
   // Compute the potential, or navigation cost, at a given point in the world
   // - must call computePotential first
@@ -142,14 +136,15 @@ protected:
   // Publishers for the path
   rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr plan_publisher_;
 
-  // Global Costmap
-  nav2_costmap_2d::Costmap2D * costmap_;
+  // The costmap to use and its size
+  nav2_msgs::msg::Costmap costmap_;
+  uint current_costmap_size_[2];
 
   // The global frame of the costmap
-  std::string global_frame_, name_;
+  const std::string global_frame_{"map"};
 
   // Whether or not the planner should be allowed to plan through unknown space
-  bool allow_unknown_;
+  const bool allow_unknown_{true};
 
   // If the goal is obstructed, the tolerance specifies how many meters the planner
   // can relax the constraint in x and y before failing

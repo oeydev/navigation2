@@ -39,7 +39,6 @@
 #include <utility>
 #include <string>
 #include "dwb_core/exceptions.hpp"
-#include "nav2_core/exceptions.hpp"
 
 namespace dwb_core
 {
@@ -49,7 +48,7 @@ public:
   IllegalTrajectoryTracker()
   : legal_count_(0), illegal_count_(0) {}
 
-  void addIllegalTrajectory(const IllegalTrajectoryException & e);
+  void addIllegalTrajectory(const nav_core2::IllegalTrajectoryException & e);
   void addLegalTrajectory();
 
   std::map<std::pair<std::string, std::string>, double> getPercentages() const;
@@ -65,13 +64,11 @@ protected:
  * @class NoLegalTrajectoriesException
  * @brief Thrown when all the trajectories explored are illegal
  */
-class NoLegalTrajectoriesException
-  : public nav2_core::PlannerException
+class NoLegalTrajectoriesException : public nav_core2::NoLegalTrajectoriesException
 {
 public:
   explicit NoLegalTrajectoriesException(const IllegalTrajectoryTracker & tracker)
-  : PlannerException(tracker.getMessage()),
-    tracker_(tracker) {}
+  : nav_core2::NoLegalTrajectoriesException(tracker.getMessage()), tracker_(tracker) {}
   IllegalTrajectoryTracker tracker_;
 };
 

@@ -54,13 +54,13 @@ amcl_rclcpp_node:
 bt_navigator:
   ros__parameters:
     use_sim_time: True
-    bt_xml_filename: "navigate_w_replanning_and_recovery.xml"
+    bt_xml_filename: "bt_navigator.xml"
 
 bt_navigator_rclcpp_node:
   ros__parameters:
     use_sim_time: True
 
-nav2_controller:
+dwb_controller:
   ros__parameters:
     use_sim_time: True
     debug_trajectory_details: True

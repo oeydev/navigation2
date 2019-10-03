@@ -45,7 +45,7 @@ template<typename ActionT>
 class Recovery
 {
 public:
-  using ActionServer = nav2_util::SimpleActionServer<ActionT, rclcpp_lifecycle::LifecycleNode>;
+  using ActionServer = nav2_util::SimpleActionServer<ActionT>;
 
   explicit Recovery(
     rclcpp::Node::SharedPtr & node, const std::string & recovery_name,
@@ -56,10 +56,12 @@ public:
     action_server_(nullptr),
     cycle_frequency_(10)
   {
+    configure();
   }
 
   virtual ~Recovery()
   {
+    cleanup();
   }
 
   // Derived classes can override this method to catch the command and perform some checks
@@ -87,9 +89,7 @@ protected:
   std::unique_ptr<nav2_costmap_2d::CollisionChecker> collision_checker_;
   double cycle_frequency_;
 
-  void configure(
-    const rclcpp_lifecycle::LifecycleNode::SharedPtr parent,
-    const std::string & name, std::shared_ptr<tf2_ros::Buffer> tf) override
+  void configure()
   {
     RCLCPP_INFO(node_->get_logger(), "Configuring %s", recovery_name_.c_str());
 
@@ -114,38 +114,14 @@ protected:
     vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 1);
   }
 
-  void cleanup() override
+  void cleanup()
   {
     action_server_.reset();
     vel_pub_.reset();
     footprint_sub_.reset();
     costmap_sub_.reset();
     collision_checker_.reset();
-    onCleanup();
   }
-
-  void activate() override
-  {
-    enabled_ = true;
-  }
-
-  void deactivate() override
-  {
-    enabled_ = false;
-  }
-
-protected:
-  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
-  std::string recovery_name_;
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
-  std::shared_ptr<tf2_ros::Buffer> tf_;
-  std::unique_ptr<ActionServer> action_server_;
-
-  std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub_;
-  std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub_;
-  std::unique_ptr<nav2_costmap_2d::CollisionChecker> collision_checker_;
-  double cycle_frequency_;
-  double enabled_;
 
   void execute()
   {

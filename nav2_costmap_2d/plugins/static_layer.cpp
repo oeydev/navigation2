@@ -239,9 +239,6 @@ StaticLayer::incomingMap(const nav_msgs::msg::OccupancyGrid::SharedPtr new_map)
 {
   std::lock_guard<Costmap2D::mutex_t> guard(*getMutex());
   processMap(*new_map);
-  if (!map_received_) {
-    map_received_ = true;
-  }
 }
 
 void
@@ -294,10 +291,6 @@ StaticLayer::updateBounds(
   double * max_x,
   double * max_y)
 {
-  if (!map_received_) {
-    return;
-  }
-
   std::lock_guard<Costmap2D::mutex_t> guard(*getMutex());
   if (!layered_costmap_->isRolling() ) {
     if (!(has_updated_data_ || has_extra_bounds_)) {
@@ -326,15 +319,6 @@ StaticLayer::updateCosts(
   int min_i, int min_j, int max_i, int max_j)
 {
   if (!enabled_) {
-    return;
-  }
-  if (!map_received_) {
-    static int count = 0;
-    // throttle warning down to only 1/10 message rate
-    if (++count == 10) {
-      RCLCPP_WARN(node_->get_logger(), "Can't update static costmap layer, no map received");
-      count = 0;
-    }
     return;
   }
 

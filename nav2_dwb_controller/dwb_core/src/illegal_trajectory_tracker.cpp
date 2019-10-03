@@ -40,8 +40,7 @@
 
 namespace dwb_core
 {
-void IllegalTrajectoryTracker::addIllegalTrajectory(
-  const dwb_core::IllegalTrajectoryException & e)
+void IllegalTrajectoryTracker::addIllegalTrajectory(const nav_core2::IllegalTrajectoryException & e)
 {
   counts_[std::make_pair(e.getCriticName(), e.what())]++;
   illegal_count_++;

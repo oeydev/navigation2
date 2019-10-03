@@ -16,7 +16,6 @@
 #define NAV2_LIFECYCLE_MANAGER__LIFECYCLE_MANAGER_CLIENT_HPP_
 
 #include <memory>
-#include <string>
 
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
@@ -24,13 +23,9 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "std_srvs/srv/empty.hpp"
-#include "nav2_msgs/srv/manage_lifecycle_nodes.hpp"
-#include "std_srvs/srv/trigger.hpp"
 
 namespace nav2_lifecycle_manager
 {
-
-enum class SystemStatus {ACTIVE, INACTIVE, TIMEOUT};
 
 class LifecycleManagerClient
 {
@@ -38,30 +33,28 @@ public:
   LifecycleManagerClient();
 
   // Client-side interface to the Nav2 lifecycle manager
-  bool startup();
-  bool shutdown();
-  bool pause();
-  bool resume();
-  bool reset();
-  SystemStatus is_active(const std::chrono::nanoseconds timeout = std::chrono::nanoseconds(-1));
+  void startup();
+  void shutdown();
 
   // A couple convenience methods to facilitate scripting tests
   void set_initial_pose(double x, double y, double theta);
   bool navigate_to_pose(double x, double y, double theta);
 
 protected:
-  using ManageLifecycleNodes = nav2_msgs::srv::ManageLifecycleNodes;
+  using Empty = std_srvs::srv::Empty;
 
   // A generic method used to call startup, shutdown, etc.
-  bool callService(uint8_t command);
+  void callService(rclcpp::Client<Empty>::SharedPtr service_client, const char * service_name);
 
   // The node to use for the service call
   rclcpp::Node::SharedPtr node_;
 
-  rclcpp::Client<ManageLifecycleNodes>::SharedPtr manager_client_;
-  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr is_active_client_;
-  std::string manage_service_name_{"lifecycle_manager/manage_nodes"};
-  std::string active_service_name_{"lifecycle_manager/is_active"};
+  // The same (empty) request for all of the services
+  std::shared_ptr<Empty::Request> request_;
+
+  // The service clients
+  rclcpp::Client<Empty>::SharedPtr startup_client_;
+  rclcpp::Client<Empty>::SharedPtr shutdown_client_;
 
   using PoseWithCovarianceStamped = geometry_msgs::msg::PoseWithCovarianceStamped;
 

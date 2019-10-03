@@ -19,7 +19,6 @@
 #include <memory>
 #include <string>
 #include <thread>
-#include <algorithm>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -52,10 +51,6 @@ public:
   PlannerTester();
   ~PlannerTester();
 
-  // Activate the tester before running tests
-  void activate();
-  void deactivate();
-
   // Loads the provided map and and generates a costmap from it.
   void loadDefaultMap();
 
@@ -80,10 +75,12 @@ public:
     ComputePathToPoseResult & path,
     const double deviation_tolerance = 1.0);
 
-  // Runs multiple tests with random initial and goal poses
   bool defaultPlannerRandomTests(
     const unsigned int number_tests,
     const float acceptable_fail_ratio);
+
+  // Sends a cancel command to the Planner
+  bool sendCancel();
 
 private:
   void setCostmap();
@@ -137,27 +134,17 @@ private:
   rclcpp::WallRate map_publish_rate_;
   void mapCallback();
 
-  // Executes a test run with the provided end points.
-  // Success criteria is a collision free path.
-  // TODO(orduno): #443 Assuming a robot the size of a costmap cell
-  bool plannerTest(
-    const geometry_msgs::msg::Point & robot_position,
-    const ComputePathToPoseCommand & goal,
-    ComputePathToPoseResult & path);
+  bool map_set_;
+  bool costmap_set_;
+  bool using_fake_costmap_;
+  bool costmap_server_running_;
 
-  bool isCollisionFree(const ComputePathToPoseResult & path);
-
-  bool isWithinTolerance(
-    const geometry_msgs::msg::Point & robot_position,
-    const ComputePathToPoseCommand & goal,
-    const ComputePathToPoseResult & path) const;
-
-  bool isWithinTolerance(
-    const geometry_msgs::msg::Point & robot_position,
-    const ComputePathToPoseCommand & goal,
-    const ComputePathToPoseResult & path,
-    const double deviationTolerance,
-    const ComputePathToPoseResult & reference_path) const;
+  // Parameters of the costmap
+  bool trinary_costmap_;
+  bool track_unknown_space_;
+  int lethal_threshold_;
+  int unknown_cost_value_;
+  nav2_util::TestCostmap testCostmapType_;
 
   // A thread for spinning the ROS node
   void spinThread();
