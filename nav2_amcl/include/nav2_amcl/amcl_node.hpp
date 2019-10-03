@@ -202,7 +202,6 @@ protected:
   bool init_pose_received_on_inactive{false};
   bool initial_pose_is_known_{false};
   bool set_initial_pose_{false};
-  bool always_reset_initial_pose_;
   double initial_pose_x_;
   double initial_pose_y_;
   double initial_pose_z_;

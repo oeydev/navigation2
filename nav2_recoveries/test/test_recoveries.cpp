@@ -37,8 +37,8 @@ using namespace std::chrono_literals;
 class DummyRecovery : public Recovery<RecoveryAction>
 {
 public:
-  DummyRecovery()
-  : Recovery<RecoveryAction>(),
+  explicit DummyRecovery(rclcpp::Node::SharedPtr & node, std::shared_ptr<tf2_ros::Buffer> & tf)
+  : Recovery<RecoveryAction>(node, "Recovery", tf),
     initialized_(false) {}
 
   ~DummyRecovery() {}
@@ -97,35 +97,21 @@ private:
 class RecoveryTest : public ::testing::Test
 {
 protected:
-  RecoveryTest() {SetUp();}
+  RecoveryTest() {}
   ~RecoveryTest() {}
 
   void SetUp()
   {
-    node_lifecycle_ =
-      std::make_shared<rclcpp_lifecycle::LifecycleNode>(
-      "LifecycleRecoveryTestNode", rclcpp::NodeOptions());
-    node_lifecycle_->declare_parameter("costmap_topic",
-      rclcpp::ParameterValue(std::string("local_costmap/costmap_raw")));
-    node_lifecycle_->declare_parameter("footprint_topic",
-      rclcpp::ParameterValue(std::string("local_costmap/published_footprint")));
+    node_ = std::make_shared<rclcpp::Node>("RecoveryTestNode");
+    auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
+    auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+    node_->declare_parameter(
+      "costmap_topic", rclcpp::ParameterValue(std::string("local_costmap/costmap_raw")));
+    node_->declare_parameter(
+      "footprint_topic", rclcpp::ParameterValue(std::string("local_costmap/published_footprint")));
+    recovery_ = std::make_unique<DummyRecovery>(node_, tf_buffer);
 
-    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(node_lifecycle_->get_clock());
-    auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-      node_lifecycle_->get_node_base_interface(),
-      node_lifecycle_->get_node_timers_interface());
-    tf_buffer_->setCreateTimerInterface(timer_interface);
-    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-
-    recovery_ = std::make_unique<DummyRecovery>();
-    recovery_->configure(node_lifecycle_, "Recovery", tf_buffer_);
-    recovery_->activate();
-
-    client_ = rclcpp_action::create_client<RecoveryAction>(
-      node_lifecycle_->get_node_base_interface(),
-      node_lifecycle_->get_node_graph_interface(),
-      node_lifecycle_->get_node_logging_interface(),
-      node_lifecycle_->get_node_waitables_interface(), "Recovery");
+    client_ = rclcpp_action::create_client<RecoveryAction>(node_, "Recovery");
   }
 
   void TearDown() override {}
@@ -190,12 +176,10 @@ protected:
     return future_result.get();
   }
 
-  std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node_lifecycle_;
+  std::shared_ptr<rclcpp::Node> node_;
   std::unique_ptr<DummyRecovery> recovery_;
   std::shared_ptr<rclcpp_action::Client<RecoveryAction>> client_;
   std::shared_ptr<rclcpp_action::ClientGoalHandle<RecoveryAction>> goal_handle_;
-  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };
 
 // Define the tests

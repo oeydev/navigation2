@@ -66,11 +66,12 @@ references:
               cat << parameters.underlay >>/checksum.txt > checksum.txt
               vcs export --exact src | \
                 (echo vcs_export && cat) >> checksum.txt
-              sha256sum $PWD/checksum.txt >> checksum.txt
+              sha256sum checksum.txt >> checksum.txt
               apt-get update
               dependencies=$(
                 rosdep install -q -y \
-                  --from-paths src \
+                  --from-paths \
+                    $UNDERLAY_WS/src \
                   --ignore-src \
                   --verbose | \
                 awk '$1 ~ /^resolution\:/' | \
@@ -78,7 +79,7 @@ references:
                 tr -d \, | xargs -n1 | sort -u | xargs)
               dpkg -s $dependencies | \
                 (echo workspace_dependencies && cat) >> checksum.txt
-              sha256sum $PWD/checksum.txt >> checksum.txt
+              sha256sum checksum.txt >> checksum.txt
     setup_workspace:
       description: "Setup Workspace"
       parameters:
@@ -176,14 +177,14 @@ references:
     run:
       name: Pre Checkout
       command: |
-        mkdir -p $ROS_WS && cd $ROS_WS
-        ln -s /opt/ros/$ROS_DISTRO install
+        mkdir -p $ROS_WS
+        ln -s /opt/ros/$ROS_DISTRO $ROS_WS/install
         echo $CACHE_NONCE | \
-          (echo cache_nonce && cat) >> checksum.txt
-        sha256sum $PWD/checksum.txt >> checksum.txt
+          (echo cache_nonce && cat) >> $ROS_WS/checksum.txt
+        sha256sum $ROS_WS/checksum.txt >> $ROS_WS/checksum.txt
         TZ=utc stat -c '%y' /ros_entrypoint.sh | \
-          (echo ros_entrypoint && cat) >> checksum.txt
-        sha256sum $PWD/checksum.txt >> checksum.txt
+          (echo ros_entrypoint && cat) >> $ROS_WS/checksum.txt
+        sha256sum $ROS_WS/checksum.txt >> $ROS_WS/checksum.txt
         rm -rf $OVERLAY_WS/*
   on_checkout: &on_checkout
     checkout:
@@ -192,6 +193,7 @@ references:
     run:
       name: Post Checkout
       command: |
+        rm $OVERLAY_WS/src/navigation2/nav2_system_tests/COLCON_IGNORE
         if ! cmp \
           $OVERLAY_WS/src/navigation2/tools/ros2_dependencies.repos \
           $UNDERLAY_WS/ros2_dependencies.repos >/dev/null 2>&1
@@ -232,7 +234,7 @@ references:
       build: false
   install_overlay_dependencies: &install_overlay_dependencies
     install_dependencies:
-      underlay: /opt/underlay_ws
+      underlay: /opt/ros_ws
       workspace: /opt/overlay_ws
   setup_overlay_workspace: &setup_overlay_workspace
     setup_workspace: &setup_workspace_overlay
@@ -268,23 +270,6 @@ references:
       file: lcov/project_coverage.info
       flags: project
       when: always
-  setup_doc_dependencies: &setup_doc_dependencies
-    run:
-      name: Install Doc Dependencies
-      command: |
-        apk --no-cache add python3
-        python3 -m ensurepip
-        pip3 install sphinx==1.7.5 docutils==0.14 sphinx_rtd_theme breathe==4.9.1 sphinxcontrib-plantuml
-        apk --no-cache add make
-        apk --no-cache add doxygen
-        apk --no-cache add graphviz
-        apk --no-cache add ttf-dejavu
-        apk --no-cache add openjdk8-jre
-  make_docs: &make_docs
-    run:
-      command: |
-        cd src/navigation2/sphinx_doc
-        make html
 
 commands:
   <<: *common_commands
@@ -327,14 +312,6 @@ commands:
     steps:
       - *collect_overlay_coverage
       - *upload_overlay_coverage
-  install_doc_dependencies:
-    description: "Install documentation dependencies"
-    steps:
-      - *setup_doc_dependencies
-  build_docs:
-    description: "Build docs"
-    steps:
-      - *make_docs
 
 executors:
   debug_exec:
@@ -345,7 +322,7 @@ executors:
       <<: *common_environment
       CACHE_NONCE: "Debug"
       OVERLAY_MIXINS: "debug ccache coverage-gcc"
-      UNDERLAY_MIXINS: "release ccache"
+      UNDERLAY_MIXINS: "debug ccache"
   release_exec:
     docker:
       - image: rosplanning/navigation2:master.release
@@ -355,10 +332,6 @@ executors:
       CACHE_NONCE: "Release"
       OVERLAY_MIXINS: "release ccache"
       UNDERLAY_MIXINS: "release ccache"
-  docs_exec:
-    docker:
-      - image: alpine:latest
-    working_directory: /opt/overlay_ws
 
 jobs:
   debug_build: &debug_build
@@ -387,10 +360,6 @@ jobs:
     <<: *release_test
     environment:
       RMW_IMPLEMENTATION: "rmw_connext_cpp"
-  test_rmw_cyclonedds_cpp:
-    <<: *release_test
-    environment:
-      RMW_IMPLEMENTATION: "rmw_cyclonedds_cpp"
   test_rmw_fastrtps_cpp:
     <<: *release_test
     environment:
@@ -399,16 +368,6 @@ jobs:
     <<: *release_test
     environment:
       RMW_IMPLEMENTATION: "rmw_opensplice_cpp"
-  docs_build:
-    executor: docs_exec
-    steps:
-      - install_doc_dependencies
-      - *on_checkout
-      - build_docs
-  docs_publish:
-    executor: docs_exec
-    steps:
-      - run: echo 'TODO - This is where we would publish the docs.'
 
 workflows:
   version: 2
@@ -422,13 +381,6 @@ workflows:
       - release_test:
           requires:
             - release_build
-      - docs_build
-      - docs_publish:
-          requires:
-            - docs_build
-          filters:
-            branches:
-              only: master
   nightly:
     jobs:
       - debug_build
@@ -437,9 +389,6 @@ workflows:
             - debug_build
       - release_build
       - test_rmw_connext_cpp:
-          requires:
-            - release_build
-      - test_rmw_cyclonedds_cpp:
           requires:
             - release_build
       - test_rmw_fastrtps_cpp:

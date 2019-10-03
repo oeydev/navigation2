@@ -71,35 +71,6 @@ LifecycleManagerClient::reset()
   return callService(ManageLifecycleNodes::Request::RESET);
 }
 
-SystemStatus
-LifecycleManagerClient::is_active(const std::chrono::nanoseconds timeout)
-{
-  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-
-  RCLCPP_INFO(node_->get_logger(), "Waiting for the lifecycle_manager's %s service...",
-    active_service_name_.c_str());
-
-  if (!is_active_client_->wait_for_service(timeout)) {
-    return SystemStatus::TIMEOUT;
-  }
-
-  RCLCPP_INFO(node_->get_logger(), "send_async_request (%s) to the lifecycle_manager",
-    active_service_name_.c_str());
-  auto future_result = is_active_client_->async_send_request(request);
-
-  if (rclcpp::spin_until_future_complete(node_, future_result, timeout) !=
-    rclcpp::executor::FutureReturnCode::SUCCESS)
-  {
-    return SystemStatus::TIMEOUT;
-  }
-
-  if (future_result.get()->success) {
-    return SystemStatus::ACTIVE;
-  } else {
-    return SystemStatus::INACTIVE;
-  }
-}
-
 void
 LifecycleManagerClient::set_initial_pose(double x, double y, double theta)
 {

@@ -27,10 +27,21 @@ from launch_testing.legacy import LaunchTestService
 def main(argv=sys.argv[1:]):
     testExecutable = os.getenv('TEST_EXECUTABLE')
 
-    ld = LaunchDescription([])
+    run_navfn = launch_ros.actions.Node(
+        package='nav2_navfn_planner',
+        node_executable='navfn_planner',
+        output='screen')
+    run_lifecycle_manager = launch_ros.actions.Node(
+        package='nav2_lifecycle_manager',
+        node_executable='lifecycle_manager',
+        node_name='lifecycle_manager',
+        output='screen',
+        parameters=[{'node_names': ['navfn_planner']}, {'autostart': True}])
+    ld = LaunchDescription([run_navfn, run_lifecycle_manager])
+
     test1_action = ExecuteProcess(
         cmd=[testExecutable],
-        name='test_planner_costmaps_node',
+        name='test_planner_node',
         output='screen'
     )
 

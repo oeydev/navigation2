@@ -24,12 +24,17 @@
 
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "nav2_core/global_planner.hpp"
-#include "nav_msgs/msg/path.hpp"
-#include "nav2_navfn_planner/navfn.hpp"
-#include "nav2_util/robot_utils.hpp"
 #include "nav2_util/lifecycle_node.hpp"
-#include "nav2_costmap_2d/costmap_2d_ros.hpp"
+#include "nav2_msgs/action/compute_path_to_pose.hpp"
+#include "nav2_msgs/msg/costmap.hpp"
+#include "nav2_msgs/msg/path.hpp"
+#include "nav2_navfn_planner/navfn.hpp"
+#include "nav2_util/costmap_service_client.hpp"
+#include "nav2_util/robot_utils.hpp"
+#include "nav2_util/simple_action_server.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "tf2_ros/transform_listener.h"
 
 namespace nav2_navfn_planner
 {
@@ -110,6 +115,17 @@ protected:
   // Set the corresponding cell cost to be free space
   void clearRobotCell(unsigned int mx, unsigned int my);
 
+  // Request costmap from world model
+  void getCostmap(
+    nav2_msgs::msg::Costmap & costmap,
+    const std::string layer = "master");
+
+  // Print costmap to terminal
+  void printCostmap(const nav2_msgs::msg::Costmap & costmap);
+
+  // Publish a path for visualization purposes
+  void publishPlan(const nav2_msgs::msg::Path & path);
+
   // Determine if a new planner object should be made
   bool isPlannerOutOfDate();
 
@@ -118,9 +134,13 @@ protected:
 
   // TF buffer
   std::shared_ptr<tf2_ros::Buffer> tf_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
-  // node ptr
-  nav2_util::LifecycleNode::SharedPtr node_;
+  // Service client for getting the costmap
+  nav2_util::CostmapServiceClient costmap_client_{"navfn_planner"};
+
+  // Publishers for the path
+  rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr plan_publisher_;
 
   // Global Costmap
   nav2_costmap_2d::Costmap2D * costmap_;

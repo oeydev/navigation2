@@ -1,11 +1,14 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
-<package format="3">
-  <name>nav2_core</name>
+<package format ="3">
+  <name>nav2_dynamic_params</name>
   <version>0.2.4</version>
-  <description>A set of headers for plugins core to the navigation2 stack</description>
-  <maintainer email="stevenmacenski@gmail.com">Steve Macenski</maintainer>
-  <maintainer email="carl.r.delsey@intel.com">Carl Delsey</maintainer>
+  <description>
+    This package provides a validation class for ROS2 parameters with validation based on parameter
+    type and defined bounds. Support for custom validation callbacks is also provided. Some useful
+    convenience functions for event callbacks are also provided
+  </description>
+  <maintainer email="brian.wilcox@intel.com">Brian Wilcox</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

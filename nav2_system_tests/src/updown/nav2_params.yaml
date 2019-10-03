@@ -92,7 +92,7 @@ nav2_controller:
     GoalDist.scale: 24.0
     RotateToGoal.scale: 32.0
 
-nav2_controller_rclcpp_node:
+dwb_controller_rclcpp_node:
   ros__parameters:
     use_sim_time: True
 
@@ -150,6 +150,10 @@ navfn_planner_rclcpp_node:
     use_sim_time: True
 
 robot_state_publisher:
+  ros__parameters:
+    use_sim_time: True
+
+world_model:
   ros__parameters:
     use_sim_time: True
 

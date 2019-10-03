@@ -46,7 +46,6 @@
 #include "nav2_util/execution_timer.hpp"
 #include "nav2_util/node_utils.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
-#include "tf2_ros/create_timer_ros.h"
 #include "nav2_util/robot_utils.hpp"
 
 using namespace std::chrono_literals;
@@ -54,24 +53,18 @@ using namespace std::chrono_literals;
 namespace nav2_costmap_2d
 {
 Costmap2DROS::Costmap2DROS(const std::string & name)
-: Costmap2DROS(name, "/", name) {}
+: Costmap2DROS(name, name) {}
 
-Costmap2DROS::Costmap2DROS(
-  const std::string & name,
-  const std::string & parent_namespace,
-  const std::string & local_namespace)
+Costmap2DROS::Costmap2DROS(const std::string & name, const std::string & absolute_namespace)
 : nav2_util::LifecycleNode(name, "", true,
     // NodeOption arguments take precedence over the ones provided on the command line
     // use this to make sure the node is placed on the provided namespace
-    // TODO(orduno) Pass a sub-node instead of creating a new node for better handling
-    //              of the namespaces
-    rclcpp::NodeOptions().arguments({"--ros-args", "-r", std::string("__ns:=") +
-      nav2_util::add_namespaces(parent_namespace, local_namespace)})),
-  name_(name), parent_namespace_(parent_namespace)
+    rclcpp::NodeOptions().arguments({std::string("__ns:=") + absolute_namespace})),
+  name_(name)
 {
   RCLCPP_INFO(get_logger(), "Creating Costmap");
   auto options = rclcpp::NodeOptions().arguments(
-    {"--ros-args", "-r", std::string("__node:=") + get_name() + "_client", "--"});
+    {"--ros-args", std::string("__node:=") + get_name() + "_client", "--"});
   client_node_ = std::make_shared<rclcpp::Node>("_", options);
 
   std::vector<std::string> plugin_names{"static_layer", "obstacle_layer", "inflation_layer"};
@@ -128,10 +121,6 @@ Costmap2DROS::on_configure(const rclcpp_lifecycle::State & /*state*/)
 
   // Create the transform-related objects
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(rclcpp_node_->get_clock());
-  auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-    rclcpp_node_->get_node_base_interface(),
-    rclcpp_node_->get_node_timers_interface());
-  tf_buffer_->setCreateTimerInterface(timer_interface);
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // Then load and add the plug-ins to the costmap

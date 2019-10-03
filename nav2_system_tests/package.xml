@@ -50,7 +50,6 @@
   <exec_depend>navigation2</exec_depend>
   <exec_depend>lcov</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
-  <exec_depend>nav2_planner</exec_depend>
 
   <test_depend>launch_ros</test_depend>
   <test_depend>launch_testing</test_depend>

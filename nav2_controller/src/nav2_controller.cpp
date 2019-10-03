@@ -34,11 +34,10 @@ ControllerServer::ControllerServer()
   RCLCPP_INFO(get_logger(), "Creating controller");
 
   declare_parameter("controller_frequency", 20.0);
-  declare_parameter("local_controller_plugin", "dwb_core::DWBLocalPlanner");
 
-  // The costmap node is used in the implementation of the local planner
+  // The costmap node is used in the implementation of the DWB controller
   costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
-    "local_costmap", std::string{get_namespace()}, "local_costmap");
+    "local_costmap", nav2_util::add_namespaces(std::string{get_namespace()}, "local_costmap"));
 
   // Launch a thread to run the costmap node
   costmap_thread_ = std::make_unique<std::thread>(
@@ -85,7 +84,10 @@ ControllerServer::on_configure(const rclcpp_lifecycle::State & state)
   get_parameter("controller_frequency", controller_frequency_);
   RCLCPP_INFO(get_logger(), "Controller frequency set to %.4fHz", controller_frequency_);
 
-  odom_sub_ = std::make_shared<nav_2d_utils::OdomSubscriber>(node);
+  get_parameter("controller_frequency", controller_frequency_);
+  RCLCPP_INFO(get_logger(), "Controller frequency set to %.4fHz", controller_frequency_);
+
+  odom_sub_ = std::make_shared<nav_2d_utils::OdomSubscriber>(*this);
   vel_publisher_ = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 1);
 
   // Create the action server that we implement with our followPath method
@@ -101,7 +103,7 @@ ControllerServer::on_activate(const rclcpp_lifecycle::State & state)
   RCLCPP_INFO(get_logger(), "Activating");
 
   costmap_ros_->on_activate(state);
-  local_planner_->activate();
+
   vel_publisher_->on_activate();
   action_server_->activate();
 
@@ -139,6 +141,7 @@ ControllerServer::on_cleanup(const rclcpp_lifecycle::State & state)
 
   vel_publisher_.reset();
   action_server_.reset();
+
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -251,7 +254,7 @@ void ControllerServer::updateGlobalPath()
 
 void ControllerServer::publishVelocity(const geometry_msgs::msg::TwistStamped & velocity)
 {
-  auto cmd_vel = velocity.twist;
+  auto cmd_vel = nav_2d_utils::twist2Dto3D(velocity.velocity);
   vel_publisher_->publish(cmd_vel);
 }
 

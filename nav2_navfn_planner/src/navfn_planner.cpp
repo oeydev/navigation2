@@ -45,6 +45,14 @@ namespace nav2_navfn_planner
 NavfnPlanner::NavfnPlanner()
 : tf_(nullptr), costmap_(nullptr)
 {
+  RCLCPP_INFO(get_logger(), "Creating");
+
+  // Declare this node's parameters
+  declare_parameter("tolerance", rclcpp::ParameterValue(0.0));
+  declare_parameter("use_astar", rclcpp::ParameterValue(false));
+
+  tf_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_);
 }
 
 NavfnPlanner::~NavfnPlanner()
@@ -76,44 +84,158 @@ NavfnPlanner::configure(
   node_->get_parameter("allow_unknown", allow_unknown_);
 
   // Create a planner based on the new costmap size
-  planner_ = std::make_unique<NavFn>(costmap_->getSizeInCellsX(),
-      costmap_->getSizeInCellsY());
+  if (isPlannerOutOfDate()) {
+    current_costmap_size_[0] = costmap_.metadata.size_x;
+    current_costmap_size_[1] = costmap_.metadata.size_y;
+    planner_ = std::make_unique<NavFn>(costmap_.metadata.size_x, costmap_.metadata.size_y);
+  }
+
+  // Initialize pubs & subs
+  plan_publisher_ = create_publisher<nav_msgs::msg::Path>("plan", 1);
+
+  auto node = shared_from_this();
+
+  // Create the action server that we implement with our navigateToPose method
+  action_server_ = std::make_unique<ActionServer>(rclcpp_node_, "ComputePathToPose",
+      std::bind(&NavfnPlanner::computePathToPose, this));
+
+  return nav2_util::CallbackReturn::SUCCESS;
 }
 
 void
 NavfnPlanner::activate()
 {
-  RCLCPP_INFO(node_->get_logger(), "Activating plugin %s", name_.c_str());
+  RCLCPP_INFO(get_logger(), "Activating");
+
+  plan_publisher_->on_activate();
+  action_server_->activate();
+
+  return nav2_util::CallbackReturn::SUCCESS;
 }
 
 void
 NavfnPlanner::deactivate()
 {
-  RCLCPP_INFO(node_->get_logger(), "Deactivating plugin %s", name_.c_str());
+  RCLCPP_INFO(get_logger(), "Deactivating");
+
+  action_server_->deactivate();
+  plan_publisher_->on_deactivate();
+
+  return nav2_util::CallbackReturn::SUCCESS;
 }
 
 void
 NavfnPlanner::cleanup()
 {
-  RCLCPP_INFO(node_->get_logger(), "Cleaning up plugin %s", name_.c_str());
+  RCLCPP_INFO(get_logger(), "Cleaning up");
+
+  action_server_.reset();
+  plan_publisher_.reset();
   planner_.reset();
+  tf_listener_.reset();
+  tf_.reset();
+
+  return nav2_util::CallbackReturn::SUCCESS;
 }
 
 nav_msgs::msg::Path NavfnPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & start,
   const geometry_msgs::msg::PoseStamped & goal)
 {
-  // Update planner based on the new costmap size
-  if (isPlannerOutOfDate()) {
-    planner_->setNavArr(costmap_->getSizeInCellsX(),
-      costmap_->getSizeInCellsY());
-  }
+  RCLCPP_FATAL(get_logger(), "Lifecycle node entered error state");
+  return nav2_util::CallbackReturn::SUCCESS;
+}
+
+nav2_util::CallbackReturn
+NavfnPlanner::on_shutdown(const rclcpp_lifecycle::State &)
+{
+  RCLCPP_INFO(get_logger(), "Shutting down");
+  return nav2_util::CallbackReturn::SUCCESS;
+}
+
+void
+NavfnPlanner::computePathToPose()
+{
+  // Initialize the ComputePathToPose goal and result
+  auto goal = action_server_->get_current_goal();
+  auto result = std::make_shared<nav2_msgs::action::ComputePathToPose::Result>();
+
+  try {
+    if (action_server_ == nullptr) {
+      RCLCPP_DEBUG(get_logger(), "Action server unavailable. Stopping.");
+      return;
+    }
+
+    if (!action_server_->is_server_active()) {
+      RCLCPP_DEBUG(get_logger(), "Action server is inactive. Stopping.");
+      return;
+    }
+
+    if (action_server_->is_cancel_requested()) {
+      RCLCPP_INFO(get_logger(), "Goal was canceled. Canceling planning action.");
+      action_server_->terminate_goals();
+      return;
+    }
+
+    // Get the current costmap
+    getCostmap(costmap_);
+    RCLCPP_DEBUG(get_logger(), "Costmap size: %d,%d",
+      costmap_.metadata.size_x, costmap_.metadata.size_y);
+
+    geometry_msgs::msg::PoseStamped start;
+    if (!nav2_util::getCurrentPose(start, *tf_)) {
+      return;
+    }
+
+    // Update planner based on the new costmap size
+    if (isPlannerOutOfDate()) {
+      current_costmap_size_[0] = costmap_.metadata.size_x;
+      current_costmap_size_[1] = costmap_.metadata.size_y;
+      planner_->setNavArr(costmap_.metadata.size_x, costmap_.metadata.size_y);
+    }
+
+    if (action_server_->is_preempt_requested()) {
+      RCLCPP_INFO(get_logger(), "Preempting the goal pose.");
+      goal = action_server_->accept_pending_goal();
+    }
+
+    RCLCPP_DEBUG(get_logger(), "Attempting to a find path from (%.2f, %.2f) to "
+      "(%.2f, %.2f).", start.pose.position.x, start.pose.position.y,
+      goal->pose.pose.position.x, goal->pose.pose.position.y);
+
+    // Make the plan for the provided goal pose
+    bool foundPath = makePlan(start.pose, goal->pose.pose, tolerance_, result->path);
 
   nav_msgs::msg::Path path;
 
-  if (!makePlan(start.pose, goal.pose, tolerance_, path)) {
-    RCLCPP_WARN(node_->get_logger(), "%s: failed to create plan with "
-      "tolerance %.2f.", name_.c_str(), tolerance_);
+    RCLCPP_DEBUG(get_logger(), "Found valid path of size %u", result->path.poses.size());
+
+    // Publish the plan for visualization purposes
+    RCLCPP_DEBUG(get_logger(), "Publishing the valid path");
+    publishPlan(result->path);
+
+    // TODO(orduno): Enable potential visualization
+
+    RCLCPP_DEBUG(get_logger(),
+      "Successfully computed a path to (%.2f, %.2f) with tolerance %.2f",
+      goal->pose.pose.position.x, goal->pose.pose.position.y, tolerance_);
+    action_server_->succeeded_current(result);
+    return;
+  } catch (std::exception & ex) {
+    RCLCPP_WARN(get_logger(), "Plan calculation to (%.2f, %.2f) failed: \"%s\"",
+      goal->pose.pose.position.x, goal->pose.pose.position.y, ex.what());
+
+    // TODO(orduno): provide information about fail error to parent task,
+    //               for example: couldn't get costmap update
+    action_server_->terminate_goals();
+    return;
+  } catch (...) {
+    RCLCPP_WARN(get_logger(), "Plan calculation failed");
+
+    // TODO(orduno): provide information about the failure to the parent task,
+    //               for example: couldn't get costmap update
+    action_server_->terminate_goals();
+    return;
   }
   return path;
 }
@@ -424,7 +546,68 @@ NavfnPlanner::clearRobotCell(unsigned int mx, unsigned int my)
 {
   // TODO(orduno): check usage of this function, might instead be a request to
   //               world_model / map server
-  costmap_->setCost(mx, my, nav2_costmap_2d::FREE_SPACE);
+  unsigned int index = my * costmap_.metadata.size_x + mx;
+  costmap_.data[index] = nav2_util::Costmap::free_space;
+}
+
+void
+NavfnPlanner::getCostmap(
+  nav2_msgs::msg::Costmap & costmap,
+  const std::string /*layer*/)
+{
+  // TODO(orduno): explicitly provide specifications for costmap using the costmap on the request,
+  //               including master (aggregate) layer
+
+  auto request = std::make_shared<nav2_util::CostmapServiceClient::CostmapServiceRequest>();
+  request->specs.resolution = 1.0;
+
+  auto result = costmap_client_.invoke(request, 5s);
+  costmap = result.get()->map;
+}
+
+void
+NavfnPlanner::printCostmap(const nav2_msgs::msg::Costmap & costmap)
+{
+  std::cout << "Costmap" << std::endl;
+  std::cout << "  size:       " <<
+    costmap.metadata.size_x << "," << costmap.metadata.size_x << std::endl;
+  std::cout << "  origin:     " <<
+    costmap.metadata.origin.position.x << "," << costmap.metadata.origin.position.y << std::endl;
+  std::cout << "  resolution: " << costmap.metadata.resolution << std::endl;
+  std::cout << "  data:       " <<
+    "(" << costmap.data.size() << " cells)" << std::endl << "    ";
+
+  const char separator = ' ';
+  const int valueWidth = 4;
+
+  unsigned int index = 0;
+  for (unsigned int h = 0; h < costmap.metadata.size_y; ++h) {
+    for (unsigned int w = 0; w < costmap.metadata.size_x; ++w) {
+      std::cout << std::left << std::setw(valueWidth) << std::setfill(separator) <<
+        static_cast<unsigned int>(costmap.data[index]);
+      index++;
+    }
+    std::cout << std::endl << "    ";
+  }
+  std::cout << std::endl;
+}
+
+void
+NavfnPlanner::publishPlan(const nav2_msgs::msg::Path & path)
+{
+  // Publish as a nav1 path msg
+  nav_msgs::msg::Path rviz_path;
+
+  rviz_path.header = path.header;
+  rviz_path.poses.resize(path.poses.size());
+
+  // Assuming path is already provided in world coordinates
+  for (unsigned int i = 0; i < path.poses.size(); i++) {
+    rviz_path.poses[i].header = path.header;
+    rviz_path.poses[i].pose = path.poses[i];
+  }
+
+  plan_publisher_->publish(rviz_path);
 }
 
 }  // namespace nav2_navfn_planner

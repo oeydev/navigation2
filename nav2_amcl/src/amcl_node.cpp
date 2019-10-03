@@ -31,6 +31,7 @@
 #include "message_filters/subscriber.h"
 #include "nav2_amcl/angleutils.hpp"
 #include "nav2_util/geometry_utils.hpp"
+#include "nav2_util/duration_conversions.hpp"
 #include "nav2_amcl/pf/pf.hpp"
 #include "nav2_util/string_utils.hpp"
 #include "nav2_amcl/sensors/laser/laser.hpp"
@@ -176,11 +177,6 @@ AmclNode::AmclNode()
   add_parameter("z_max", rclcpp::ParameterValue(0.05));
   add_parameter("z_rand", rclcpp::ParameterValue(0.5));
   add_parameter("z_short", rclcpp::ParameterValue(0.05));
-
-  add_parameter("always_reset_initial_pose", rclcpp::ParameterValue(false),
-    "Requires that AMCL is provided an initial pose either via topic or initial_pose* parameter "
-    "(with parameter set_initial_pose: true) when reset. Otherwise, by default AMCL will use the"
-    "last known pose to initialize");
 }
 
 AmclNode::~AmclNode()
@@ -1079,7 +1075,19 @@ AmclNode::handleMapMessage(const nav_msgs::msg::OccupancyGrid & msg)
 #if NEW_UNIFORM_SAMPLING
   createFreeSpaceVector();
 #endif
+  // Create the particle filter
+  initParticleFilter();
+  // resample_count = 0 is extra
 
+  // Instantiate the sensor objects
+  motion_model_.reset();
+  motion_model_ = std::unique_ptr<nav2_amcl::MotionModel>(nav2_amcl::MotionModel::createMotionModel(
+        robot_model_type_, alpha1_, alpha2_, alpha3_, alpha4_, alpha5_));
+
+  // Laser
+  lasers_.clear();
+
+  handleInitialPose(last_published_pose_);
 }
 
 void
@@ -1104,11 +1112,17 @@ AmclNode::freeMapDependentMemory()
     map_ = NULL;
   }
 
-  // Clear queued laser objects because they hold pointers to the existing
-  // map, #5202.
+  if (pf_ != NULL) {
+    pf_free(pf_);
+    pf_ = NULL;
+  }
+
+  motion_model_.reset();
+  motion_model_ = std::unique_ptr<nav2_amcl::MotionModel>(nav2_amcl::MotionModel::createMotionModel(
+        robot_model_type_, alpha1_, alpha2_, alpha3_, alpha4_, alpha5_));
+
+  // Laser
   lasers_.clear();
-  lasers_update_.clear();
-  frame_to_laser_.clear();
 }
 
 // Convert an OccupancyGrid map message into the internal representation. This function
@@ -1148,10 +1162,6 @@ AmclNode::initTransforms()
 
   // Initialize transform listener and broadcaster
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(rclcpp_node_->get_clock());
-  auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-    rclcpp_node_->get_node_base_interface(),
-    rclcpp_node_->get_node_timers_interface());
-  tf_buffer_->setCreateTimerInterface(timer_interface);
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
   tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(rclcpp_node_);
 

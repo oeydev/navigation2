@@ -54,8 +54,6 @@ private Q_SLOTS:
   void onStartup();
   void onShutdown();
   void onCancel();
-  void onPause();
-  void onResume();
   void onNewGoal(double x, double y, double theta, QString frame);
 
 private:
@@ -80,6 +78,8 @@ private:
   nav2_msgs::action::NavigateToPose::Goal goal_;
   GoalHandle::SharedPtr goal_handle_;
 
+  // A timer used to check on the completion status of the action
+
   // The client used to control the nav2 stack
   nav2_lifecycle_manager::LifecycleManagerClient client_;
 
@@ -90,48 +90,17 @@ private:
 
   QState * pre_initial_{nullptr};
   QState * initial_{nullptr};
-  QState * idle_{nullptr};
-  QState * reset_{nullptr};
-  QState * paused_{nullptr};
-  QState * resumed_{nullptr};
-  // The following states are added to allow for the state of the button to only expose reset
+  QState * starting_{nullptr};
+  QState * stopping_{nullptr};
+  // The following states are added to allow for the state of the button to only expose shutdown
   // while the NavigateToPose action is not active. While running, the user will be allowed to
   // cancel the action. The ROSActionTransition allows for the state of the action to be detected
-  // and the button state to change automatically.
+  // and the button state to change automatically. The additional states canceled_ and
+  // completed_ support the transitions from running into states that can transition to shutdown
+  // but do nothing upon entrance.
   QState * running_{nullptr};
   QState * canceled_{nullptr};
-};
-
-class InitialThread : public QThread
-{
-  Q_OBJECT
-
-public:
-  using SystemStatus = nav2_lifecycle_manager::SystemStatus;
-
-  explicit InitialThread(nav2_lifecycle_manager::LifecycleManagerClient & client)
-  : client_(client)
-  {}
-
-  void run() override
-  {
-    SystemStatus status = SystemStatus::TIMEOUT;
-    while (status == SystemStatus::TIMEOUT) {
-      status = client_.is_active(std::chrono::seconds(1));
-    }
-    if (status == SystemStatus::ACTIVE) {
-      emit activeSystem();
-    } else {
-      emit inactiveSystem();
-    }
-  }
-
-signals:
-  void activeSystem();
-  void inactiveSystem();
-
-private:
-  nav2_lifecycle_manager::LifecycleManagerClient client_;
+  QState * completed_{nullptr};
 };
 
 }  // namespace nav2_rviz_plugins

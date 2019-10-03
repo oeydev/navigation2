@@ -21,8 +21,8 @@
         </RecoveryNode>
       </Sequence>
       <SequenceStar name="RecoveryActions">
-        <ClearEntireCostmap service_name="local_costmap/clear_entirely_local_costmap"/>
-        <ClearEntireCostmap service_name="global_costmap/clear_entirely_global_costmap"/>
+        <ClearEntireCostmap service_name="/local_costmap/clear_entirely_local_costmap"/>
+        <ClearEntireCostmap service_name="/global_costmap/clear_entirely_global_costmap"/>
         <Spin/>
         <Wait wait_duration="5"/>
       </SequenceStar>

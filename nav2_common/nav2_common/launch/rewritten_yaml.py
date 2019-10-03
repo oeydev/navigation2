@@ -79,14 +79,9 @@ class RewrittenYaml(launch.Substitution):
   def perform(self, context: launch.LaunchContext) -> Text:
     yaml_filename = launch.utilities.perform_substitutions(context, self.name)
     rewritten_yaml = tempfile.NamedTemporaryFile(mode='w', delete=False)
-    param_rewrites, keys_rewrites = self.resolve_rewrites(context)
+    resolved_rewrites = self.resolve_rewrites(context)
     data = yaml.safe_load(open(yaml_filename, 'r'))
-    self.substitute_params(data, param_rewrites)
-    self.substitute_keys(data, keys_rewrites)
-    if self.__root_key is not None:
-        root_key = launch.utilities.perform_substitutions(context, self.__root_key)
-        if root_key:
-            data = {root_key: data}
+    self.substitute_values(data, resolved_rewrites)
     yaml.dump(data, rewritten_yaml)
     rewritten_yaml.close()
     return rewritten_yaml.name

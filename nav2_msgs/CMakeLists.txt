@@ -29,7 +29,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/Spin.action"
   "action/DummyRecovery.action"
   "action/RandomCrawl.action"
-  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs action_msgs nav_msgs
+  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs action_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)

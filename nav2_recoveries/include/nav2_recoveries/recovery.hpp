@@ -24,12 +24,10 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_ros/transform_listener.h"
-#include "tf2_ros/create_timer_ros.h"
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav2_costmap_2d/collision_checker.hpp"
 #include "nav2_util/simple_action_server.hpp"
 #include "nav2_util/robot_utils.hpp"
-#include "nav2_core/recovery.hpp"
 
 namespace nav2_recoveries
 {
@@ -44,15 +42,19 @@ enum class Status : int8_t
 using namespace std::chrono_literals;  //NOLINT
 
 template<typename ActionT>
-class Recovery : public nav2_core::Recovery
+class Recovery
 {
 public:
   using ActionServer = nav2_util::SimpleActionServer<ActionT, rclcpp_lifecycle::LifecycleNode>;
 
-  Recovery()
-  : action_server_(nullptr),
-    cycle_frequency_(10),
-    enabled_(false)
+  explicit Recovery(
+    rclcpp::Node::SharedPtr & node, const std::string & recovery_name,
+    std::shared_ptr<tf2_ros::Buffer> tf)
+  : node_(node),
+    recovery_name_(recovery_name),
+    tf_(*tf),
+    action_server_(nullptr),
+    cycle_frequency_(10)
   {
   }
 
@@ -73,27 +75,23 @@ public:
   // It's up to the derived class to define the final commanded velocity.
   virtual Status onCycleUpdate() = 0;
 
-  // an opportunity for derived classes to do something on configuration
-  // if they chose
-  virtual void onConfigure()
-  {
-  }
+protected:
+  rclcpp::Node::SharedPtr node_;
+  std::string recovery_name_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
+  tf2_ros::Buffer & tf_;
+  std::unique_ptr<ActionServer> action_server_;
 
-  // an opportunity for derived classes to do something on cleanup
-  // if they chose
-  virtual void onCleanup()
-  {
-  }
+  std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub_;
+  std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub_;
+  std::unique_ptr<nav2_costmap_2d::CollisionChecker> collision_checker_;
+  double cycle_frequency_;
 
   void configure(
     const rclcpp_lifecycle::LifecycleNode::SharedPtr parent,
     const std::string & name, std::shared_ptr<tf2_ros::Buffer> tf) override
   {
-    RCLCPP_INFO(parent->get_logger(), "Configuring %s", name.c_str());
-
-    node_ = parent;
-    tf_ = tf;
-    recovery_name_ = name;
+    RCLCPP_INFO(node_->get_logger(), "Configuring %s", recovery_name_.c_str());
 
     std::string costmap_topic;
     std::string footprint_topic;
@@ -111,11 +109,9 @@ public:
       node_, footprint_topic);
 
     collision_checker_ = std::make_unique<nav2_costmap_2d::CollisionChecker>(
-      *costmap_sub_, *footprint_sub_, *tf_, node_->get_name(), "odom");
+      *costmap_sub_, *footprint_sub_, tf_, node_->get_name(), "odom");
 
     vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 1);
-
-    onConfigure();
   }
 
   void cleanup() override
@@ -154,11 +150,6 @@ protected:
   void execute()
   {
     RCLCPP_INFO(node_->get_logger(), "Attempting %s", recovery_name_.c_str());
-
-    if (!enabled_) {
-      RCLCPP_WARN(node_->get_logger(), "Called while inactive, ignoring request.");
-      return;
-    }
 
     if (onRun(action_server_->get_current_goal()) != Status::SUCCEEDED) {
       RCLCPP_INFO(node_->get_logger(), "Initial checks failed for %s", recovery_name_.c_str());
